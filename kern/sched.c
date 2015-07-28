@@ -29,6 +29,21 @@ sched_yield(void)
 	// below to halt the cpu.
 
 	// LAB 4: Your code here.
+	idle = curenv;
+	int32_t init_id = idle==NULL?0:ENVX(curenv->env_id);
+	int i = 0;
+	for(; i < NENV; i++)
+	{
+		int32_t index = (init_id+i)%NENV;
+		if(envs[index].env_status == ENV_RUNNABLE)
+		{
+			env_run(&envs[index]);
+		}
+	}
+	if(idle != NULL && idle->env_status == ENV_RUNNING)
+	{
+		env_run(idle);
+	}
 
 	// sched_halt never returns
 	sched_halt();
