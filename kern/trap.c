@@ -248,7 +248,6 @@ trap_dispatch(struct Trapframe *tf)
 		break;
 	}
 /*
->>>>>>> lab3
 	// Unexpected trap: The user process or the kernel has a bug.
 	print_trapframe(tf);
 	if (tf->tf_cs == GD_KT)
@@ -367,6 +366,25 @@ page_fault_handler(struct Trapframe *tf)
 	//   (the 'tf' variable points at 'curenv->env_tf').
 
 	// LAB 4: Your code here.
+	if(curenv->env_pgfault_upcall != NULL)
+	{
+		struct UTrapframe * utf;
+		if(tf->tf_esp >= (UXSTACKTOP - PGSIZE) && (tf->tf_esp < UXSTACKTOP))
+			utf = (struct UTrapframe *)(tf->tf_esp - 4 - sizeof(struct UTrapframe));
+		else 
+			utf = (struct UTrapframe *)(UXSTACKTOP - sizeof(struct UTrapframe));
+		user_mem_assert(curenv, utf, sizeof(struct UTrapframe), PTE_P|PTE_U|PTE_W);
+		utf->utf_fault_va = fault_va;
+		utf->utf_err = tf->tf_err;
+		utf->utf_regs = tf->tf_regs;
+		utf->utf_eip = tf->tf_eip;
+		utf->utf_eflags = tf->tf_eflags;
+		utf->utf_esp = tf->tf_esp;
+		
+		tf->tf_esp = (uintptr_t)utf;
+		tf->tf_eip = (uintptr_t)curenv->env_pgfault_upcall;
+		env_run(curenv);
+	}
 
 	// Destroy the environment that caused the fault.
 	cprintf("[%08x] user fault va %08x ip %08x\n",

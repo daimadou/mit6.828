@@ -384,7 +384,6 @@ syscall(uint32_t syscallno, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4, 
 	case SYS_env_set_status:
 		return sys_env_set_status(a1, a2);
 	case SYS_page_alloc:
-		cprintf("passing perm:0%d\n", (int)a3);
 		return sys_page_alloc(a1, (void *)a2, a3);
 	case SYS_page_map:
 		return sys_page_map(a1, (void *)a2, a3, (void *)a4, a5);
