@@ -235,7 +235,7 @@ trap_dispatch(struct Trapframe *tf)
 		monitor(tf);
 		break;
 	case T_SYSCALL:
-		regs->reg_eax = syscall(regs->reg_eax, regs->reg_edx, regs->reg_ecx, regs->reg_edx, regs->reg_edi, regs->reg_esi);
+		regs->reg_eax = syscall(regs->reg_eax, regs->reg_edx, regs->reg_ecx, regs->reg_ebx, regs->reg_edi, regs->reg_esi);
 		break;
 	default:
 		// Unexpected trap: The user process or the kernel has a bug.
