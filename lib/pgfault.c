@@ -35,12 +35,13 @@ set_pgfault_handler(void (*handler)(struct UTrapframe *utf))
 				   PTE_P|PTE_U|PTE_W);
 		if(r < 0)
 			panic("set_pgfault_handler: sys_page_alloc error:0xe\n", r);
+
+		r = sys_env_set_pgfault_upcall(thisenv->env_id, (void *)_pgfault_upcall);
+		if(r < 0)
+			panic("set_pgfault_handler: sys_env_set_pgfault_upcall error:0xe\n", r);
 		
 	}
 
 	// Save handler pointer for assembly to call.
 	_pgfault_handler = handler;
-	r = sys_env_set_pgfault_upcall(thisenv->env_id, (void *)_pgfault_upcall);
-	if(r < 0)
-		panic("set_pgfault_handler: sys_env_set_pgfault_upcall error:0xe\n", r);
 }
