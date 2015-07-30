@@ -335,7 +335,66 @@ static int
 sys_ipc_try_send(envid_t envid, uint32_t value, void *srcva, unsigned perm)
 {
 	// LAB 4: Your code here.
-	panic("sys_ipc_try_send not implemented");
+	//panic("sys_ipc_try_send not implemented");
+	int r; 
+	struct Env * dstenv;
+	r = envid2env(envid, &dstenv, 0);
+	if(r < 0)
+		return -E_BAD_ENV;
+	
+	if(!dstenv->env_ipc_recving)
+		return -E_IPC_NOT_RECV;
+	
+	if((uintptr_t)srcva < UTOP)
+	{
+		if(PGOFF(srcva)!=0)
+		{
+			cprintf("sys_ipc_try_send:srcva:0%x is not page-aligend\n", srcva);
+			return -E_INVAL;
+		}
+		
+		if((perm | PTE_SYSCALL) != PTE_SYSCALL || 
+		   (perm & (PTE_U|PTE_P)) != (PTE_U|PTE_P))
+		{
+			cprintf("sys_ipc_try_send:perm:0%x is not right\n", perm);
+			return -E_INVAL;
+		}
+		
+		pte_t *pte;
+		struct PageInfo *pp;
+		pp = page_lookup(curenv->env_pgdir, srcva, &pte);
+		if(pp == NULL)
+		{
+			cprintf("sys_ipc_try_send:page_lookup:srcva:%x isn't in an existing page\n", srcva);
+			return -E_INVAL;
+		}
+		
+		if((*pte&PTE_W) != (perm&PTE_W))
+		{
+			cprintf("sys_ipc_try_send:page on srcva:%x is readonly\n", srcva);
+			return -E_INVAL;
+		}
+
+		if(dstenv->env_ipc_dstva != NULL &&
+		   (uintptr_t)dstenv->env_ipc_dstva < UTOP)
+		{
+			r = page_insert(dstenv->env_pgdir, pp, dstenv->env_ipc_dstva, perm);
+			if(r < 0)
+				return -E_NO_MEM;
+			dstenv->env_ipc_perm = perm;
+		}
+		else
+		{
+			dstenv->env_ipc_perm = 0;
+		}
+	}
+	dstenv->env_ipc_recving = false;
+	dstenv->env_ipc_value = value;
+	dstenv->env_ipc_from = curenv->env_id;
+	dstenv->env_status = ENV_RUNNABLE;
+	dstenv->env_tf.tf_regs.reg_eax = 0;
+	
+	return 0;
 }
 
 // Block until a value is ready.  Record that you want to receive
@@ -353,7 +412,16 @@ static int
 sys_ipc_recv(void *dstva)
 {
 	// LAB 4: Your code here.
-	panic("sys_ipc_recv not implemented");
+	//panic("sys_ipc_recv not implemented");
+	if((uintptr_t)dstva < UTOP && PGOFF(dstva) != 0)
+	{
+		cprintf("sys_ipc_recv:dstva is not page-aligned\n");
+		return -E_INVAL;
+	}
+	curenv->env_ipc_recving = true;
+	curenv->env_ipc_dstva = dstva;
+	curenv->env_status = ENV_NOT_RUNNABLE;
+	sys_yield();
 	return 0;
 }
 
@@ -365,7 +433,7 @@ syscall(uint32_t syscallno, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4, 
 	// Return any appropriate return value.
 	// LAB 3: Your code here.
 
-
+	int r;
 	switch (syscallno) {
 	case SYS_cputs:
 		sys_cputs((char *)a1, a2);
@@ -391,6 +459,10 @@ syscall(uint32_t syscallno, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4, 
 		return sys_page_unmap(a1, (void *)a2);
 	case SYS_env_set_pgfault_upcall:
 		return sys_env_set_pgfault_upcall(a1, (void *)a2);
+	case SYS_ipc_try_send:	
+		return sys_ipc_try_send(a1, a2, (void *)a3, a4);;
+	case SYS_ipc_recv:
+		return sys_ipc_recv((void *)a1);
 	default:
 		return -E_NO_SYS;
 	}
