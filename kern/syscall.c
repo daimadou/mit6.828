@@ -56,10 +56,6 @@ sys_env_destroy(envid_t envid)
 
 	if ((r = envid2env(envid, &e, 1)) < 0)
 		return r;
-	if (e == curenv)
-		cprintf("[%08x] exiting gracefully\n", curenv->env_id);
-	else
-		cprintf("[%08x] destroying %08x\n", curenv->env_id, e->env_id);
 	env_destroy(e);
 	return 0;
 }
@@ -123,6 +119,39 @@ sys_env_set_status(envid_t envid, int status)
 		return -E_INVAL;
 	
 	e->env_status = status;
+	return 0;
+}
+
+// Set envid's trap frame to 'tf'.
+// tf is modified to make sure that user environments always run at code
+// protection level 3 (CPL 3) with interrupts enabled.
+//
+// Returns 0 on success, < 0 on error.  Errors are:
+//	-E_BAD_ENV if environment envid doesn't currently exist,
+//		or the caller doesn't have permission to change envid.
+static int
+sys_env_set_trapframe(envid_t envid, struct Trapframe *tf)
+{
+	// LAB 5: Your code here.
+	// Remember to check whether the user has supplied us with a good
+	// address!
+	//panic("sys_env_set_trapframe not implemented");
+
+	int r; 
+	struct Env *e;
+	if((r = envid2env(envid, &e, 1)) < 0)
+		return -E_BAD_ENV;
+
+	struct PageInfo *pp;
+	pte_t *pte;
+	if((pp = page_lookup(e->env_pgdir, tf, &pte)) == NULL)
+		return -E_BAD_ENV;
+	
+	if(!(*pte & PTE_U)||!(*pte & PTE_P))
+		return -E_BAD_ENV;
+	e->env_tf = *tf;
+	e->env_tf.tf_eflags |= FL_IF;
+	e->env_tf.tf_cs |= 3;
 	return 0;
 }
 
@@ -244,18 +273,30 @@ sys_page_map(envid_t srcenvid, void *srcva,
 	   PGOFF(srcva)             || 
 	   (uintptr_t)dstva >= UTOP || 
 	   PGOFF(dstva))
+	{
+		cprintf("sys_page_map: dstva or srcva is not less than UTOP\n");
 		return -E_INVAL;
+	}
 	
 	pte_t * srcpte;
 	struct PageInfo *pp = page_lookup(srcenv->env_pgdir, srcva, &srcpte);
 	if(pp == NULL)
+	{
+		cprintf("sys_page_map: can't find page\n");
 		return -E_INVAL;
+	}
 	
 	if((perm | PTE_SYSCALL) != PTE_SYSCALL || (perm & (PTE_U|PTE_P)) != (PTE_U|PTE_P))
+	{
+		cprintf("sys_page_map: perm wrong\n");
 		return -E_INVAL;
+	}
 
 	if((perm & PTE_W) && !((*srcpte) & PTE_W))
+	{
+		cprintf("sys_page_map: perm wrong\n");
 		return -E_INVAL;
+	}
 
 	ret = page_insert(dstenv->env_pgdir, pp, dstva, perm);
 	if(ret < 0)
@@ -451,6 +492,8 @@ syscall(uint32_t syscallno, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4, 
 		return sys_exofork();
 	case SYS_env_set_status:
 		return sys_env_set_status(a1, a2);
+	case SYS_env_set_trapframe:
+		return sys_env_set_trapframe(a1, (struct Trapframe *)a2);
 	case SYS_page_alloc:
 		return sys_page_alloc(a1, (void *)a2, a3);
 	case SYS_page_map:
@@ -464,7 +507,7 @@ syscall(uint32_t syscallno, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4, 
 	case SYS_ipc_recv:
 		return sys_ipc_recv((void *)a1);
 	default:
-		return -E_NO_SYS;
+		return -E_INVAL;
 	}
 }
 

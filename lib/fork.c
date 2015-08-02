@@ -74,14 +74,35 @@ duppage(envid_t envid, unsigned pn)
 	// LAB 4: Your code here.
 	//panic("duppage not implemented");
 	void * addr = (void *)(pn*PGSIZE); 	
-	if((uvpt[pn] & PTE_W) || (uvpt[pn] & PTE_COW))
+	envid_t curenvid = sys_getenvid(); 
+	if(uvpt[pn] & PTE_SHARE)
 	{
-		r = sys_page_map(0, addr, envid, addr, PTE_COW|PTE_U|PTE_P);
+		r = sys_page_map(curenvid, addr, envid, addr, uvpt[pn]&PTE_SYSCALL);
 		if(r < 0)
 			panic("duppage: 0 to %x sys_page_map error:%r", envid ,r);
-		r = sys_page_map(0, addr, 0, addr, PTE_COW|PTE_U|PTE_P);
+	}
+	else
+	{
+		int perm = (uvpt[pn] & PTE_W) || (uvpt[pn] & PTE_COW)? PTE_P|PTE_U|PTE_COW:uvpt[pn];
+		perm &= PTE_SYSCALL; 
+		// we must first copy the map to child, then change the parent perm to PTE_COW
+		// and the order shouldn't be changed!!!!! The reason is that if we change the 
+                // parent's perm first, the once we finished it. If the a page fault happened 
+		// which related to this page, then the page will be copied to another place, and
+		// this new page's perm will be PTE_W. So then we copy this to child. Then the 
+		// same page child's perm will be PTE_COW and parent will be PTE_W. This is not
+		// what we want!!!
+		r = sys_page_map(curenvid, addr, envid, addr, perm);
 		if(r < 0)
-			panic("duppage: 0 to %x sys_page_map error:%r", 0, r);
+			panic("duppage: 0 to %x sys_page_map error:%e", 0, r);
+		
+		if(perm & PTE_COW)
+		{
+		    r = sys_page_map(curenvid, addr, curenvid, addr, perm);
+		    if(r < 0)
+			    panic("duppage: 0 to %x sys_page_map error:%r", envid ,r);
+		}
+
 	}
 	return 0;
 }
@@ -116,12 +137,10 @@ fork(void)
 		thisenv = &envs[ENVX(sys_getenvid())];
 		return 0;
 	} 
-       
 	uintptr_t va;
 	for(va = 0; va < USTACKTOP; va+=PGSIZE)
 	{
 		if((uvpd[PDX(va)]   & PTE_P) && 
-		   (uvpt[PGNUM(va)] & PTE_U) &&
 		   (uvpt[PGNUM(va)] & PTE_P))
 			duppage(childenvid, PGNUM(va));
 	}

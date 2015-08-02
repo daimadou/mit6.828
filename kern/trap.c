@@ -239,7 +239,7 @@ trap_dispatch(struct Trapframe *tf)
 		break;
 	case T_SYSCALL:
 		regs->reg_eax = syscall(regs->reg_eax, regs->reg_edx, regs->reg_ecx, regs->reg_ebx, regs->reg_edi, regs->reg_esi);
-		break;
+		return;
 	case IRQ_OFFSET + IRQ_TIMER:
 	// Handle clock interrupts. Don't forget to acknowledge the
 	// interrupt using lapic_eoi() before calling the scheduler!
@@ -247,22 +247,35 @@ trap_dispatch(struct Trapframe *tf)
 		lapic_eoi();
 		sched_yield();
 		break;
+	case IRQ_OFFSET + IRQ_KBD:
+		kbd_intr();
+		return;
+	case IRQ_OFFSET + IRQ_SERIAL:
+		serial_intr();
+		return;
 	case IRQ_OFFSET + IRQ_SPURIOUS: 
 	// Handle spurious interrupts
 	// The hardware sometimes raises these because of noise on the
 	// IRQ line or other reasons. We don't care.
 		cprintf("Spurious interrupt on irq 7\n");
 		print_trapframe(tf);
-		break;
-	default:
-		// Unexpected trap: The user process or the kernel has a bug.
-		print_trapframe(tf);
-		if (tf->tf_cs == GD_KT)
-			panic("unhandled trap in kernel");
-		else {
-			env_destroy(curenv);
-		}
-		break;
+		return;
+	}
+
+	// Handle clock interrupts. Don't forget to acknowledge the
+	// interrupt using lapic_eoi() before calling the scheduler!
+	// LAB 4: Your code here.
+
+	// Handle keyboard and serial interrupts.
+	// LAB 5: Your code here.
+
+	// Unexpected trap: The user process or the kernel has a bug.
+	print_trapframe(tf);
+	if (tf->tf_cs == GD_KT)
+		panic("unhandled trap in kernel");
+	else {
+		env_destroy(curenv);
+		return;
 	}
 }
 
