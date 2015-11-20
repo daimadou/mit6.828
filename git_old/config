@@ -1,0 +1,8 @@
+[core]
+	repositoryformatversion = 0
+	filemode = true
+	bare = false
+	logallrefupdates = true
+[remote "github"]
+	url = https://github.com/zzhu2011/mit6.828.git
+	fetch = +refs/heads/*:refs/remotes/github/*
